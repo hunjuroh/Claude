@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>카드뉴스 메이커</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* VOICE: 편집국 데스크의 작업 도구. 단정하고 빠르게
+   IDEA: 조판대. 왼쪽은 원고, 오른쪽은 막 찍혀 나온 교정쇄
+   PICTURE: 실제 카드 미리보기 캐러셀 자체
+   COLOUR and TYPE: 흰 바탕, 먹색, 신문 빨강 하나 / Noto Sans KR
+   LAYOUT: 먹색 제목줄, 원고 | 교정쇄 2단, 아래에 캡션과 장별 편집 */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#121212);--ink:light-dark(#141414,#ececec);--sub:light-dark(#5a5a5a,#a9a9a9);--line:light-dark(#dedede,#303030);--panel:light-dark(#f4f4f2,#1b1b1b);--red:#d7261e}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Noto Sans KR","Apple SD Gothic Neo",sans-serif;overflow-x:clip}
+.top{background:#141414;color:#fff;padding:22px max(5vw,16px);display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;border-bottom:4px solid var(--red)}
+.top h1{margin:0;font-size:32px;line-height:1.05;font-weight:900}
+.top p{margin:0;color:#bdbdbd;font-size:15px}
+.wrap{max-width:1240px;margin:0 auto;padding:28px max(4vw,16px);display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);grid-template-areas:"desk stage";gap:36px}
+.desk{grid-area:desk}.stage{grid-area:stage}
+h2{font-size:20px;margin:0 0 12px;font-weight:700}
+label{display:block;font-size:14px;font-weight:700;margin:16px 0 6px}
+input,textarea,select{font:16px/1.5 "Noto Sans KR","Apple SD Gothic Neo",sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
+textarea{resize:vertical}
+input[type=color]{padding:4px;height:44px}
+input[type=file]{padding:8px}
+:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+button{font:700 15px/1 "Noto Sans KR","Apple SD Gothic Neo",sans-serif;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--ink)}
+button.primary{background:var(--red);border-color:var(--red);color:#fff;width:100%;min-height:52px;font-size:17px}
+button.primary:disabled{opacity:.6;cursor:wait}
+.seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;border:0;padding:0;margin:0}
+.seg legend{font-size:14px;font-weight:700;margin-bottom:6px}
+.seg label{margin:0;font-weight:500;border:1px solid var(--line);border-radius:8px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px}
+.seg input{position:absolute;opacity:0;width:1px}
+.seg input:checked+span{font-weight:900}
+.seg label:has(input:checked){background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg label:has(input:focus-visible){outline:2px solid var(--red);outline-offset:2px}
+.row{display:grid;grid-template-columns:minmax(0,110px) minmax(0,1fr);gap:12px}
+.note{font-size:13px;color:var(--sub);margin:8px 0 0}
+#msg{min-height:24px;font-size:14px;margin:10px 0 0}
+#msg.err{color:var(--red)}
+details{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:700;min-height:32px}
+.stagehead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.nav{display:flex;gap:6px}.nav button{width:44px;padding:0}
+.rail{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 14px;outline-offset:4px}
+.rail figure{flex:0 0 min(80%,380px);margin:0;scroll-snap-align:start}
+.rail img{display:block;width:100%;aspect-ratio:4/5;border-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 10px 28px rgba(0,0,0,.16);background:var(--panel)}
+.rail figcaption{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--sub);margin-top:8px}
+.rail figcaption button{min-height:36px;font-size:13px;padding:0 12px}
+.acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px}
+.acts .primary{width:auto;padding:0 22px}
+.lower{background:var(--panel);border-top:1px solid var(--line)}
+.lower .in{max-width:1240px;margin:0 auto;padding:28px max(4vw,16px);display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:36px}
+#cap{min-height:260px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:8px 0 0}
+.chips li{font-size:13px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 10px}
+#eds{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.ed{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
+.edh{display:flex;gap:6px;align-items:center}
+.edh b{font-size:15px;margin-right:auto}
+.edh select{width:auto;padding:6px 8px;min-height:36px}
+.edh button{min-height:36px;width:36px;padding:0;font-size:14px}
+.ed label{margin:10px 0 4px;font-size:13px}
+.ed textarea,.ed input{font-size:16px;padding:8px 10px}
+#add{margin-top:14px}
+@media(max-width:900px){.wrap,.lower .in{grid-template-columns:minmax(0,1fr)}.wrap{grid-template-areas:"stage" "desk"}}
+@media(prefers-reduced-motion:no-preference){.rail img{transition:opacity .25s}.busy .rail img{opacity:.45}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>카드뉴스 메이커</h1>
+  <p>기사를 붙여 넣으면 인스타그램 카드뉴스 이미지(1080×1350)와 게시 캡션을 만듭니다</p>
+</header>
+
+<main class="wrap">
+  <section class="stage" aria-label="미리보기">
+    <div class="stagehead">
+      <h2>미리보기</h2>
+      <div class="nav"><button id="prev" aria-label="이전 장">←</button><button id="next" aria-label="다음 장">→</button></div>
+    </div>
+    <div id="rail" class="rail" tabindex="0" aria-label="카드 목록"></div>
+    <div class="acts">
+      <button id="zip" class="primary" hidden>전체 이미지 저장 (ZIP)</button>
+      <span id="dlhint" class="note">이미지를 길게 누르거나 우클릭해서 저장할 수 있습니다.</span>
+    </div>
+    <p class="note" id="sampleNote">지금 보이는 카드와 기사는 예시입니다. 수치는 실제 시세가 아닙니다.</p>
+  </section>
+
+  <section class="desk" aria-label="기사 입력">
+    <fieldset class="seg" id="series">
+      <legend>시리즈</legend>
+      <label><input type="radio" name="series" value="climate"><span>기후위기의 역습</span></label>
+      <label><input type="radio" name="series" value="open"><span>증시 개장</span></label>
+      <label><input type="radio" name="series" value="close" checked><span>증시 마감</span></label>
+      <label><input type="radio" name="series" value="general"><span>일반 기사</span></label>
+    </fieldset>
+    <label for="title">기사 제목</label>
+    <input id="title" autocomplete="off">
+    <label for="body">기사 본문</label>
+    <textarea id="body" rows="11" placeholder="기사 본문을 그대로 붙여 넣으세요"></textarea>
+    <div class="row">
+      <div><label for="count">장수</label>
+        <select id="count"><option>5</option><option selected>6</option><option>7</option><option>8</option></select></div>
+      <div><label for="photo">표지 사진 (선택)</label><input id="photo" type="file" accept="image/*"></div>
+    </div>
+    <p class="note" id="photoNote" hidden>표지 사진 적용됨 · <button id="rmPhoto" style="min-height:32px;font-size:13px">사진 빼기</button></p>
+    <div style="margin-top:18px"><button id="gen" class="primary">카드뉴스 생성</button></div>
+    <p id="msg" role="status" aria-live="polite"></p>
+    <details>
+      <summary>매체 설정</summary>
+      <label for="bname">매체 이름</label><input id="bname">
+      <label for="bhandle">인스타그램 계정</label><input id="bhandle">
+      <label for="bcolor">일반 기사 강조색</label><input id="bcolor" type="color">
+      <p class="note">설정은 이 브라우저에 저장됩니다.</p>
+    </details>
+  </section>
+</main>
+
+<section class="lower">
+  <div class="in">
+    <div>
+      <h2>인스타그램 캡션</h2>
+      <textarea id="cap" aria-label="캡션"></textarea>
+      <div class="acts"><button id="copy">캡션 복사</button></div>
+      <h2 style="margin-top:22px;font-size:16px">게시 전 원문과 대조할 것</h2>
+      <ul id="verify" class="chips"></ul>
+    </div>
+    <div>
+      <h2>장별 편집</h2>
+      <div id="eds"></div>
+      <button id="add">+ 장 추가</button>
+    </div>
+  </div>
+</section>
+
+<script>
+{
+const $=s=>document.querySelector(s);
+const W=1080,H=1350,PAD=90;
+const SERIES={climate:{kicker:'기후위기의 역습'},open:{kicker:'오늘의 증시 · 개장'},close:{kicker:'오늘의 증시 · 마감'},general:{kicker:'뉴스'}};
+const KINDS={cover:'표지',point:'본문',index:'수치표',quote:'인용',outro:'마무리'};
+const STRIPES=['#08306b','#08519c','#2171b5','#4292c6','#6baed6','#9ecae1','#c6dbef','#deebf7','#fee0d2','#fcbba1','#fc9272','#fb6a4a','#ef3b2c','#cb181d','#a50f15','#67000d'];
+const d0=new Date(),TODAY=`${d0.getFullYear()}.${String(d0.getMonth()+1).padStart(2,'0')}.${String(d0.getDate()).padStart(2,'0')}`;
+const str=v=>v==null?'':String(v).replace(/\\n/g,'\n');
+const use=n=>window.claude&&window.claude.use?window.claude.use(n):Promise.resolve(null);
+const h=(t,p={},k=[])=>{const e=Object.assign(document.createElement(t),p);for(const c of k)e.append(c);return e};
+
+let brand={name:'○○일보',handle:'@news_official',color:'#d7261e'};
+try{Object.assign(brand,JSON.parse(localStorage.getItem('cn-brand')||'{}'))}catch(e){}
+
+const st={series:'close',photo:null,canvases:[],slides:[
+ {kind:'cover',title:'코스피 2,810선 회복\n외국인 사흘 만에 순매수',body:'반도체 강세에 0.66% 오르며 마감',dir:'up'},
+ {kind:'index',title:'오늘의 지수',items:[{name:'코스피',value:'2,812.45',change:'+18.32',pct:'+0.66%'},{name:'코스닥',value:'868.10',change:'-3.25',pct:'-0.37%'},{name:'원/달러 환율',value:'1,384.2원',change:'-4.1원',pct:''}]},
+ {kind:'point',title:'반도체가 끌어올렸다',body:'미국 기술주 반등 소식에 반도체 대형주로 매수세가 몰렸습니다. 외국인은 유가증권시장에서 3,200억 원어치를 순매수했습니다.'},
+ {kind:'point',title:'코스닥은 약세',body:'2차전지 종목에서 차익 실현 매물이 나오면서 코스닥은 0.37% 내렸습니다.'},
+ {kind:'point',title:'내일 볼 것',body:'밤사이 발표되는 미국 물가 지표와 원/달러 환율 흐름이 다음 거래일 방향을 가를 전망입니다.'},
+ {kind:'outro',title:'자세한 내용은\n프로필 링크에서',body:'매일 장 마감 후 증시를 정리해 드립니다'}
+],caption:'코스피가 반도체 강세에 힘입어 2,810선을 회복했습니다. 외국인이 사흘 만에 순매수로 돌아섰고, 코스닥은 2차전지 약세로 소폭 내렸습니다. 밤사이 미국 물가 지표가 다음 거래일의 변수입니다.\n▶ 기사 전문은 프로필 링크에서',
+tags:['#증시','#코스피','#코스닥','#장마감','#반도체','#환율','#경제뉴스'],verify:['코스피 2,812.45 (+18.32)','코스닥 868.10 (-3.25)','환율 1,384.2원','외국인 순매수 3,200억 원']};
+$('#title').value='코스피, 반도체 강세에 2,810선 회복…외국인 사흘 만에 순매수';
+$('#body').value='코스피가 반도체 대형주 강세에 힘입어 2,810선을 회복했다. 25일 유가증권시장에서 코스피는 전 거래일보다 18.32포인트(0.66%) 오른 2,812.45에 장을 마쳤다. 외국인은 3,200억 원어치를 순매수하며 사흘 만에 매수 우위로 돌아섰다. 코스닥은 2차전지 종목의 차익 실현 매물에 3.25포인트(0.37%) 내린 868.10에 마감했다. 원/달러 환율은 4.1원 내린 1,384.2원에 거래를 마쳤다. 시장에서는 밤사이 발표되는 미국 물가 지표가 다음 거래일 방향을 가를 것으로 보고 있다. (예시 기사)';
+
+/* ---------- 카드 그리기 ---------- */
+const F=(w,s)=>`${w} ${s}px "Noto Sans KR","Apple SD Gothic Neo",sans-serif`;
+function theme(){
+  const s=st.series;
+  if(s==='climate')return{bg:'#f3efe7',ink:'#1a1a1a',sub:'#5a534a',acc:'#c4161c',dark:false};
+  if(s==='open'||s==='close')return{bg:'#0d1b2e',ink:'#ffffff',sub:'#9fb0c8',acc:s==='open'?'#ffb020':'#7fd0ff',dark:true};
+  return{bg:'#ffffff',ink:'#141414',sub:'#5c5c5c',acc:brand.color||'#d7261e',dark:false};
+}
+function wrap(x,text,maxW){
+  const out=[];
+  for(const para of String(text||'').split('\n')){
+    let line='';
+    for(const w of para.split(/(\s+)/)){
+      if(!w)continue;
+      if(x.measureText(line+w).width<=maxW){line+=w;continue}
+      if(line.trim()){out.push(line.trimEnd());line=''}
+      const ww=w.trimStart();
+      if(x.measureText(ww).width<=maxW){line=ww;continue}
+      for(const ch of ww){if(x.measureText(line+ch).width>maxW&&line){out.push(line);line=''}line+=ch}
+    }
+    out.push(line.trimEnd());
+  }
+  return out;
+}
+function fit(x,text,maxW,maxH,size,min,w,lh){
+  for(let s=size;s>=min;s-=2){x.font=F(w,s);const L=wrap(x,text,maxW);if(L.length*s*lh<=maxH)return{L,s,lh,w}}
+  x.font=F(w,min);return{L:wrap(x,text,maxW),s:min,lh,w};
+}
+function put(x,r,X,y,color){x.font=F(r.w,r.s);x.fillStyle=color;r.L.forEach((l,i)=>x.fillText(l,X,y+i*r.s*r.lh));return y+r.L.length*r.s*r.lh}
+const hgt=r=>r.L.length*r.s*r.lh;
+function rr(x,X,y,w,hh,r){x.beginPath();if(x.roundRect)x.roundRect(X,y,w,hh,r);else x.rect(X,y,w,hh)}
+function dirOf(c){c=String(c||'').trim();return /^[+▲]|상승|올라/.test(c)?'up':/^[-−▼]|하락|내려/.test(c)?'down':'flat'}
+
+function stripes(x,y,hh){const sw=W/STRIPES.length;STRIPES.forEach((c,k)=>{x.fillStyle=c;x.fillRect(k*sw,y,sw+1,hh)})}
+function spark(x,dir,col){
+  let seed=11;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  const N=42,top=290,bot=700,pts=[];let v=dir==='down'?.78:dir==='up'?.25:.5;
+  for(let k=0;k<N;k++){v+=(rnd()-.5)*.13+(dir==='down'?-.013:dir==='up'?.013:0);v=Math.min(.95,Math.max(.05,v));pts.push([PAD+k*(W-2*PAD)/(N-1),bot-v*(bot-top)])}
+  const g=x.createLinearGradient(0,top,0,bot);g.addColorStop(0,col+'66');g.addColorStop(1,col+'00');
+  x.beginPath();x.moveTo(pts[0][0],bot);pts.forEach(p=>x.lineTo(p[0],p[1]));x.lineTo(pts[N-1][0],bot);x.closePath();x.fillStyle=g;x.fill();
+  x.beginPath();pts.forEach((p,k)=>k?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1]));x.strokeStyle=col;x.lineWidth=8;x.lineJoin='round';x.stroke();
+  const e=pts[N-1];x.beginPath();x.arc(e[0],e[1],14,0,7);x.fillStyle=col;x.fill();
+}
+
+function draw(sl,i,n){
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+  const t=theme(),UP=t.dark?'#ff5a5f':'#c4161c',DOWN=t.dark?'#4d9bff':'#1f5fbf';
+  let ink=t.ink,sub=t.sub;const acc=t.acc,cover=sl.kind==='cover',photo=cover&&st.photo;
+  x.textBaseline='top';x.fillStyle=t.bg;x.fillRect(0,0,W,H);
+  // 배경 장식
+  if(photo){
+    const im=st.photo,r=Math.max(W/im.width,H/im.height),w=im.width*r,hh=im.height*r;
+    x.drawImage(im,(W-w)/2,(H-hh)/2,w,hh);
+    const g=x.createLinearGradient(0,H*.2,0,H);g.addColorStop(0,'rgba(0,0,0,.05)');g.addColorStop(.5,'rgba(0,0,0,.7)');g.addColorStop(1,'rgba(0,0,0,.92)');
+    x.fillStyle=g;x.fillRect(0,0,W,H);ink='#ffffff';sub='rgba(255,255,255,.82)';
+    if(st.series==='climate')stripes(x,0,20);
+  }else if(st.series==='climate'){
+    if(cover)stripes(x,0,600);else stripes(x,0,20);
+  }else if(t.dark){
+    x.fillStyle='rgba(255,255,255,.05)';for(let y=135;y<1200;y+=135)x.fillRect(0,y,W,2);
+    if(cover)spark(x,sl.dir||'flat',sl.dir==='up'?UP:sl.dir==='down'?DOWN:acc);
+  }else{
+    if(cover){x.fillStyle=acc;x.fillRect(0,0,W,600);x.font=F(900,150);x.fillStyle='rgba(255,255,255,.16)';x.fillText(brand.name,PAD-8,410)}
+    else{x.fillStyle=acc;x.fillRect(0,0,W,16)}
+  }
+  // 머리표
+  const kick=sl.kicker||SERIES[st.series].kicker;
+  x.font=F(700,32);const kw=x.measureText(kick).width;
+  rr(x,PAD,96,kw+44,58,29);x.fillStyle=acc;x.fill();
+  x.fillStyle=t.dark?t.bg:'#ffffff';x.fillText(kick,PAD+22,107);
+  const MW=W-2*PAD;
+  if(cover){
+    const tr=fit(x,sl.title,MW,440,96,56,900,1.22);
+    const br=sl.body?fit(x,sl.body,MW,160,42,30,500,1.45):null;
+    let y=1170-(br?hgt(br)+30:0)-hgt(tr);
+    y=put(x,tr,PAD,y,ink);if(br)put(x,br,PAD,y+30,sub);
+  }else if(sl.kind==='index'){
+    let y=put(x,fit(x,sl.title||'오늘의 지수',MW,170,62,44,900,1.25),PAD,210,ink)+36;
+    const its=(sl.items||[]).filter(o=>o.name||o.value);const rh=Math.min(230,(1190-y)/Math.max(1,its.length));
+    its.forEach((o,k)=>{
+      const yy=y+k*rh;x.fillStyle=t.dark?'rgba(255,255,255,.16)':'rgba(0,0,0,.14)';x.fillRect(PAD,yy,MW,2);
+      x.font=F(500,36);x.fillStyle=sub;x.fillText(o.name,PAD,yy+26);
+      const fs=Math.round(Math.min(86,rh*.42));x.font=F(900,fs);x.fillStyle=ink;x.fillText(o.value,PAD,yy+74);
+      const d=dirOf(o.change||o.pct),col=d==='up'?UP:d==='down'?DOWN:sub,ar=d==='up'?'▲ ':d==='down'?'▼ ':'';
+      x.textAlign='right';x.fillStyle=col;
+      if(o.change){x.font=F(700,44);x.fillText(ar+String(o.change).replace(/^[+\-−▲▼]\s*/,''),W-PAD,yy+34)}
+      if(o.pct){x.font=F(700,40);x.fillText(String(o.pct),W-PAD,yy+34+(o.change?62:0))}
+      x.textAlign='left';
+    });
+  }else if(sl.kind==='quote'){
+    x.font=F(900,240);x.fillStyle=acc;x.fillText('“',PAD-14,170);
+    const y=put(x,fit(x,sl.title,MW,600,62,40,700,1.45),PAD,440,ink);
+    if(sl.body)put(x,fit(x,'— '+sl.body,MW,120,36,28,500,1.4),PAD,y+40,sub);
+  }else if(sl.kind==='outro'){
+    x.textAlign='center';
+    const tr=fit(x,sl.title||'자세한 내용은\n프로필 링크에서',MW,420,82,56,900,1.28);
+    const br=sl.body?fit(x,sl.body,MW,130,38,28,500,1.45):null;
+    let y=640-(hgt(tr)+(br?hgt(br)+36:0)+96)/2;
+    y=put(x,tr,W/2,y,ink);if(br)y=put(x,br,W/2,y+36,sub);
+    x.font=F(700,42);x.fillStyle=acc;x.fillText(brand.handle,W/2,y+50);
+    x.textAlign='left';
+  }else{
+    const y=put(x,fit(x,sl.title,MW,330,70,48,900,1.28),PAD,214,ink)+46;
+    put(x,fit(x,sl.body,MW,1180-y,54,30,400,1.62),PAD,y,ink);
+  }
+  // 바닥글
+  x.globalAlpha=.28;x.fillStyle=ink;x.fillRect(PAD,1222,MW,2);x.globalAlpha=1;
+  x.font=F(700,30);x.fillStyle=ink;x.fillText(brand.name,PAD,1250);
+  const bw=x.measureText(brand.name).width;x.font=F(400,28);x.fillStyle=sub;x.fillText(brand.handle,PAD+bw+18,1252);
+  x.textAlign='right';x.fillText(`${TODAY} · ${i+1}/${n}`,W-PAD,1252);x.textAlign='left';
+  return c;
+}
+
+let dl=null;
+async function render(){
+  const txt=(JSON.stringify(st.slides)+brand.name+brand.handle+'“—·▲▼0123456789'+Object.values(SERIES).map(s=>s.kicker).join('')).slice(0,3000);
+  try{await Promise.all([400,500,700,900].map(w=>document.fonts.load(F(w,40),txt)))}catch(e){}
+  const n=st.slides.length,rail=$('#rail');
+  st.canvases=st.slides.map((s,i)=>draw(s,i,n));
+  rail.textContent='';
+  st.canvases.forEach((c,i)=>{
+    const img=h('img',{src:c.toDataURL('image/jpeg',.92),alt:`${i+1}번 카드`});
+    const cap=h('figcaption',{},[h('span',{textContent:`${i+1} / ${n} · ${KINDS[st.slides[i].kind]}`})]);
+    if(dl)cap.append(h('button',{textContent:'이 장 저장',onclick:()=>saveOne(i)}));
+    rail.append(h('figure',{},[img,cap]));
+  });
+}
+let tm=0;const later=()=>{clearTimeout(tm);tm=setTimeout(render,250)};
+
+/* ---------- 편집기 ---------- */
+const itemsToText=a=>(a||[]).map(o=>[o.name,o.value,o.change,o.pct].map(v=>v||'').join(' | ').replace(/( \| )+$/,'')).join('\n');
+const textToItems=t=>t.split('\n').filter(l=>l.trim()).map(l=>{const [name,value,change,pct]=l.split('|').map(s=>s.trim());return{name:name||'',value:value||'',change:change||'',pct:pct||''}});
+function editors(){
+  const box=$('#eds');box.textContent='';
+  st.slides.forEach((s,i)=>{
+    const sel=h('select',{'aria-label':`${i+1}장 종류`});
+    for(const k in KINDS)sel.append(h('option',{value:k,textContent:KINDS[k]}));
+    sel.value=s.kind;sel.onchange=()=>{s.kind=sel.value;if(s.kind==='index'&&!s.items)s.items=[];editors();render()};
+    const mv=(d)=>{const j=i+d;if(j<0||j>=st.slides.length)return;[st.slides[i],st.slides[j]]=[st.slides[j],st.slides[i]];editors();render()};
+    const head=h('div',{className:'edh'},[h('b',{textContent:`${i+1}장`}),sel,
+      h('button',{textContent:'↑',title:'앞으로','aria-label':'앞으로',onclick:()=>mv(-1)}),
+      h('button',{textContent:'↓',title:'뒤로','aria-label':'뒤로',onclick:()=>mv(1)}),
+      h('button',{textContent:'✕',title:'삭제','aria-label':'삭제',onclick:()=>{if(st.slides.length>1){st.slides.splice(i,1);editors();render()}}})]);
+    const field=(lab,key,tag,rows)=>{const id=`e${i}${key}`;const el=h(tag,{id,rows:rows||1});el.value=s[key]||'';el.oninput=()=>{s[key]=el.value;later()};return[h('label',{htmlFor:id,textContent:lab}),el]};
+    const kids=[head,...field('제목','title','textarea',2)];
+    if(s.kind==='index'){
+      const id=`e${i}items`,ta=h('textarea',{id,rows:4,placeholder:'코스피 | 2,812.45 | +18.32 | +0.66%'});
+      ta.value=itemsToText(s.items);ta.oninput=()=>{s.items=textToItems(ta.value);later()};
+      kids.push(h('label',{htmlFor:id,textContent:'수치 (이름 | 값 | 변동 | 등락률, 한 줄에 하나)'}),ta);
+    }else kids.push(...field(s.kind==='quote'?'발언자':s.kind==='cover'?'부제':'본문','body','textarea',s.kind==='point'?4:2));
+    if(s.kind==='cover'&&(st.series==='open'||st.series==='close')){
+      const id=`e${i}dir`,d=h('select',{id});[['up','상승'],['down','하락'],['flat','보합']].forEach(([v,l])=>d.append(h('option',{value:v,textContent:l})));
+      d.value=s.dir||'flat';d.onchange=()=>{s.dir=d.value;render()};kids.push(h('label',{htmlFor:id,textContent:'표지 그래프 방향'}),d);
+    }
+    kids.push(...field('머리표 (비우면 시리즈 이름)','kicker','input'));
+    box.append(h('div',{className:'ed'},kids));
+  });
+}
+function lowerPanel(){
+  $('#cap').value=(st.caption||'')+(st.tags.length?'\n\n'+st.tags.join(' '):'');
+  const v=$('#verify');v.textContent='';
+  (st.verify.length?st.verify:['없음']).forEach(t=>v.append(h('li',{textContent:t})));
+}
+
+/* ---------- 생성 ---------- */
+const GUIDE={
+ climate:'시리즈 "기후위기의 역습". 구성: cover(경각심을 주는 제목) → 핵심 사실·수치(point, 비교할 수치가 3개 이상이면 index) → 원인(point) → 피해·영향(point) → 전문가 발언이 기사에 있으면 quote → 대응·우리가 할 일(point) → outro. 경각심은 주되 과장하지 말 것.',
+ open:'시리즈 "증시 개장". 구성: cover(개장 흐름 한 줄, dir은 코스피 방향) → index(코스피·코스닥·원/달러 환율 등 기사에 있는 것만, 개장 시점 수치) → 출발 배경·간밤 미국 증시(point) → 수급: 외국인·기관·개인(point) → 주목 업종·종목(point) → outro.',
+ close:'시리즈 "증시 마감". 구성: cover(오늘 장 한 줄 요약, dir은 코스피 방향) → index(코스피·코스닥·원/달러 환율 등 기사에 있는 것만, 종가 기준) → 상승·하락 요인(point) → 수급: 외국인·기관·개인(point) → 업종·종목 동향(point) → 내일 볼 변수(point, 기사에 있을 때만) → outro.',
+ general:'일반 기사. 구성: cover → 핵심 내용 point 여러 장(수치 비교가 중심이면 index, 핵심 발언이 있으면 quote) → outro.'
+};
+function prompt(title,article,count){
+  return `너는 한국 언론사의 SNS 편집자다. 아래 기사로 인스타그램 카드뉴스 ${count}장(표지·마무리 포함)과 게시물 캡션을 만든다.
+
+${GUIDE[st.series]}
+
+규칙:
+- 기사에 없는 사실·수치는 절대 만들지 않는다. 수치·인명·기관명·단위는 원문 표기 그대로 쓴다.
+- cover.title: 24자 이내, 필요하면 \\n으로 두 줄. cover.body: 30자 이내 부제. cover.dir: "up"|"down"|"flat" (증시가 아니면 "").
+- point.title: 18자 이내. point.body: 90자 이내, 1~3문장, 쉬운 말과 "~습니다"체.
+- index.title: 짧게(예: "오늘의 지수"). index.items: [{"name":"코스피","value":"2,812.45","change":"+18.32","pct":"+0.66%"}] 형식, change와 pct에는 +/- 부호를 붙인다. 없는 값은 "".
+- quote.title: 발언 원문 60자 이내. quote.body: "이름 직함".
+- outro.title: "자세한 내용은\\n프로필 링크에서" 같은 두 줄. outro.body: 한 줄 안내.
+- kicker는 모두 "".
+- caption: 3~5문장 요약, 마지막 줄은 "▶ 기사 전문은 프로필 링크에서". 이모지는 2개 이하.
+- hashtags: 6~10개, 각각 #으로 시작.
+- verify: 카드와 캡션에 쓴 수치·고유명사 가운데 게시 전 원문과 대조해야 할 항목(각 20자 이내).
+
+JSON 객체 하나만 출력한다. 형식:
+{"slides":[{"kind":"cover|point|index|quote|outro","kicker":"","title":"","body":"","dir":"","items":[]}],"caption":"","hashtags":[],"verify":[]}
+
+기사 제목: ${title}
+기사 본문:
+${article}`;
+}
+function norm(v){
+  if(typeof v==='string')v=JSON.parse(v.replace(/^[^{]*/,'').replace(/[^}]*$/,''));
+  const sl=(Array.isArray(v&&v.slides)?v.slides:[]).map(o=>({kind:KINDS[o&&o.kind]?o.kind:'point',kicker:str(o.kicker),title:str(o.title),body:str(o.body),
+    dir:['up','down','flat'].includes(o.dir)?o.dir:'',items:Array.isArray(o.items)?o.items.map(it=>({name:str(it&&it.name),value:str(it&&it.value),change:str(it&&it.change),pct:str(it&&it.pct)})):[]}));
+  if(!sl.length)throw{message:'카드 내용을 받지 못했습니다'};
+  st.slides=sl;st.caption=str(v.caption);
+  st.tags=(Array.isArray(v.hashtags)?v.hashtags:[]).map(t=>{t=str(t).trim();return t.startsWith('#')?t:'#'+t}).filter(t=>t.length>1);
+  st.verify=(Array.isArray(v.verify)?v.verify:[]).map(str).filter(Boolean);
+}
+const msg=(t,err)=>{const m=$('#msg');m.textContent=t;m.className=err?'err':''};
+let busy=false;
+$('#gen').onclick=async()=>{
+  if(busy)return;
+  const title=$('#title').value.trim(),article=$('#body').value.trim();
+  if(article.length<80){msg('기사 본문을 붙여 넣어 주세요 (80자 이상).',true);return}
+  const sample=await use('sample');
+  if(!sample){msg('AI 생성은 claude.ai에서 이 페이지를 열었을 때만 동작합니다. 카드는 아래 편집 칸에서 직접 고칠 수 있습니다.',true);return}
+  busy=true;const b=$('#gen');b.disabled=true;b.textContent='생성 중… (20~40초)';document.body.classList.add('busy');msg('기사를 읽고 카드 문안을 쓰는 중입니다.');
+  try{
+    const p=prompt(title,article,$('#count').value);
+    const v=typeof sample.json==='function'?await sample.json(p,{modelTier:'default'}):(await sample(p,{modelTier:'default'})).text;
+    norm(v);$('#sampleNote').hidden=true;editors();lowerPanel();await render();
+    msg('완성했습니다. 문구를 확인하고, 필요하면 아래에서 고친 뒤 저장하세요.');
+    $('#rail').scrollTo({left:0});
+  }catch(e){
+    const c=e&&e.code;
+    msg(c==='not_granted'?'AI 사용 권한이 허용되지 않았습니다.':c==='rate_limited'?'요청이 많습니다. 잠시 후 다시 눌러 주세요.':'생성에 실패했습니다: '+((e&&e.message)||'알 수 없는 오류'),true);
+  }finally{busy=false;b.disabled=false;b.textContent='카드뉴스 생성';document.body.classList.remove('busy')}
+};
+
+/* ---------- 저장·복사 ---------- */
+const fname=i=>`${TODAY.replace(/\./g,'')}_${SERIES[st.series].kicker.replace(/[^\w가-힣]+/g,'')}_${String(i+1).padStart(2,'0')}.jpg`;
+const blobOf=c=>new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+async function saveOut(filename,data){
+  try{await dl.save({filename,data});msg(`${filename} 저장했습니다.`)}
+  catch(e){msg(e&&e.code==='declined'?'저장을 취소했습니다.':'저장할 수 없습니다. 이미지를 길게 누르거나 우클릭해 저장해 주세요.',e&&e.code!=='declined')}
+}
+async function saveOne(i){await saveOut(fname(i),await blobOf(st.canvases[i]))}
+$('#zip').onclick=async()=>{
+  if(!window.JSZip){msg('ZIP 도구를 불러오지 못했습니다. 장별 저장을 이용해 주세요.',true);return}
+  const z=new JSZip();for(let i=0;i<st.canvases.length;i++)z.file(fname(i),await blobOf(st.canvases[i]));
+  await saveOut(`카드뉴스_${TODAY.replace(/\./g,'')}.zip`,await z.generateAsync({type:'blob'}));
+};
+$('#copy').onclick=()=>{const t=$('#cap').value;
+  navigator.clipboard.writeText(t).then(()=>msg('캡션을 복사했습니다.')).catch(()=>{$('#cap').select();msg('선택된 캡션을 Ctrl+C(⌘+C)로 복사하세요.')})};
+
+/* ---------- 기타 입력 ---------- */
+document.querySelectorAll('#series input').forEach(r=>r.onchange=()=>{st.series=r.value;editors();render()});
+$('#photo').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{st.photo=im;$('#photoNote').hidden=false;render()};im.src=URL.createObjectURL(f)};
+$('#rmPhoto').onclick=()=>{st.photo=null;$('#photo').value='';$('#photoNote').hidden=true;render()};
+[['bname','name'],['bhandle','handle'],['bcolor','color']].forEach(([id,k])=>{const el=$('#'+id);el.value=brand[k];
+  el.oninput=()=>{brand[k]=el.value;try{localStorage.setItem('cn-brand',JSON.stringify(brand))}catch(e){}later()}});
+$('#add').onclick=()=>{st.slides.splice(Math.max(0,st.slides.length-1),0,{kind:'point',title:'새 장',body:''});editors();render()};
+const step=d=>{const r=$('#rail'),f=r.querySelector('figure');r.scrollBy({left:d*((f?f.offsetWidth:300)+16),behavior:'smooth'})};
+$('#prev').onclick=()=>step(-1);$('#next').onclick=()=>step(1);
+$('#rail').onkeydown=e=>{if(e.key==='ArrowLeft'){e.preventDefault();step(-1)}if(e.key==='ArrowRight'){e.preventDefault();step(1)}};
+
+editors();lowerPanel();render();
+use('downloads').then(d=>{if(!d)return;dl=d;$('#zip').hidden=false;$('#dlhint').hidden=true;render()});
+}
+</script>
+</body>
+</html>
